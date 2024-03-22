@@ -1,5 +1,4 @@
 function Params = ExtractKilosortData(KiloSortPaths, Params, RawDataPathsInput)
-
 % Prepares cluster information for subsequent analysis
 
 %% Inputs:
@@ -54,14 +53,12 @@ AllKiloSortPaths = cell(1, length(KiloSortPaths));
 AllChannelPos = cell(1, length(KiloSortPaths));
 AllProbeSN = cell(1, length(KiloSortPaths));
 RawDataPaths = cell(1, length(KiloSortPaths));
-IncludeThese = true(1,length(KiloSortPaths));
 
 countid = 1;
 % figure;
 cols = jet(length(KiloSortPaths));
 for subsesid = 1:length(KiloSortPaths)
-    if isempty(dir(fullfile(KiloSortPaths{subsesid},'*.npy')))
-        IncludeThese(subsesid) = false;
+    if isempty(dir(fullfile(KiloSortPaths{subsesid}, '*.npy')))
         continue
     end
 
@@ -106,6 +103,7 @@ for subsesid = 1:length(KiloSortPaths)
             else
                 rawD = dir(fullfile(RawDataPathsInput{subsesid}));
             end
+
         end
 
         RawDataPaths{subsesid} = rawD; % Definitely save as cell
@@ -115,11 +113,11 @@ for subsesid = 1:length(KiloSortPaths)
             spikeStruct = loadParamsPy(fullfile(KiloSortPaths{subsesid}, 'params.py'));
             rawD = spikeStruct.dat_path;
             if any(strfind(rawD, '"'))
-                rawD = rawD(strfind(rawD(1:10), '"')+1:end);
+                rawD = rawD(strfind(rawD, '"')+1:end);
                 rawD = rawD(1:strfind(rawD, '"')-1);
             end
             if any(strfind(rawD,'../'))
-                rawD = rawD(strfind(rawD,'../')+3:end);
+                rawD = rawD(strfind(rawD,'../')+3:end)
             end
             tmpdr = rawD;
             rawD = dir(rawD);
@@ -128,13 +126,12 @@ for subsesid = 1:length(KiloSortPaths)
             end
             % Try another way
             if isempty(rawD)
-                FolderParts = strsplit(KiloSortPaths{subsesid},{'pyKS','PyKS','kilosort2'});
-                rawD = dir(fullfile(FolderParts{1},'**','*bin'));
-                if length(rawD)>1
-                    rawD = rawD(1);
-                end
+                FolderParts = strsplit(KiloSortPaths{subsesid},{'pyKS','PyKS'});
+                rawD = dir(fullfile(FolderParts{1},'*bin'));
                 %                 rawD = fullfile(rawD.folder,rawD.name);
-            end        
+            end
+          
+          
         else
             if isstruct(Params.RawDataPaths)
                 rawD = Params.RawDataPaths(subsesid);
@@ -152,78 +149,42 @@ for subsesid = 1:length(KiloSortPaths)
     end
     Params.DecompressionFlag = 0;
   
+
     %% Load existing?
+    rawDcell = cell(numel(rawD),1);
+    for iCell = 1:numel(rawD)
+      rawDcell{iCell} = rawD(iCell).name;
+    end
     if exist(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat')) && ~Params.RedoQM && ~Params.ReLoadAlways
         % Check if parameters are the same, of not we have to redo it
         % anyway
-        dateViolationflag = 0;
-        FileInfo = dir(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'));
-        if isfield(Params,'FromDate') && datetime(FileInfo(1).date) < Params.FromDate
-            dateViolationflag = 1;
-        end
+        tmpparam = matfile(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'));
+        tmpparam = tmpparam.Params;
 
-        try
-           tmpparam = load(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'),'SessionParams');     
-           tmpparam = tmpparam.SessionParams;
-           overwrite = 0;
-        catch  % Old way of storing things, less flexible so overwrite
-            tmpparam = load(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'),'Params');
-            tmpparam = tmpparam.Params;
-            overwrite = 1;
-        end
-        
-        if tmpparam.RunQualityMetrics == Params.RunQualityMetrics && tmpparam.RunPyKSChronicStitched == Params.RunPyKSChronicStitched && ~dateViolationflag
+        if tmpparam.RunQualityMetrics == Params.RunQualityMetrics && tmpparam.RunPyKSChronicStitched == Params.RunPyKSChronicStitched
             if ~isfield(tmpparam,'RecordingDuration') || tmpparam.RecordingDuration < Params.MinRecordingDuration
-                if ~isempty(rawD) & ~contains(rawD(1).name,'.dat')
+                if ~isempty(rawD) & ~contains(rawDcell,'.dat')
                     [channelpostmpconv, probeSN, recordingduration] = ChannelIMROConversion(rawD(1).folder, 0); % For conversion when not automatically done
-                    channelmapKS = readNPY(fullfile(KiloSortPaths{subsesid},'channel_positions.npy'));
-
-                    Params.RecordingDuration = recordingduration;
                     if recordingduration<Params.MinRecordingDuration
                         disp([KiloSortPaths{subsesid} ' recording too short, skip...'])
                         continue
                     end
                 end
             end
+
             disp(['Found existing data in ', KiloSortPaths{subsesid}, ', Using this...'])
 
-            if isfield(tmpparam,'AllProbeSN')
-                if exist('channelpostmpconv','var') && any(tmpparam.AllChannelPos{1}(:) ~= channelpostmpconv(:))
-
-                    figure; scatter(tmpparam.AllChannelPos{1}(:,1),tmpparam.AllChannelPos{1}(:,2))
-                    hold on; scatter(channelpostmpconv(:,1),channelpostmpconv(:,2))
-                    channelmapKS = readNPY(fullfile(KiloSortPaths{subsesid},'channel_positions.npy'));
-                    scatter(channelmapKS(:,1),channelmapKS(:,2))
-                    title('Blue = stored in prepared data, red = correct map, yellow = used by KS')
-
-                    SpacingsKS = max(unique(diff(channelmapKS(:,1))));
-                    SpacingsReal = max(unique(diff(channelpostmpconv(:,1))));
-                    if (SpacingsReal - SpacingsKS) == 50
-                        disp('Kilosort used different shank spacing for IMRO table. Not a big problem')
-                    else
-                        warning('Kilosort probably used wrong IMRO table. Consider reanalyzing')
-                    end
-                    tmpparam.AllChannelPos = {channelpostmpconv};
-                    tmpparam.AllProbeSN = {probeSN};
-                    overwrite = 1;
-                end
+            if isfield(tmpparam,'AllChannelPos')
+              try
                 AllChannelPos{subsesid} = tmpparam.AllChannelPos{1};
-                AllProbeSN{subsesid} = tmpparam.AllProbeSN{1};
+              catch
+                AllChannelPos{subsesid} = tmpparam.AllChannelPos;
+              end
+                %AllProbeSN{subsesid} = tmpparam.AllProbeSN{1};
                 countid = countid + 1;
-                if ~overwrite
-                    continue
-                end
+                continue
             else
                 ExtractChannelMapThenContinue = 1;
-            end
-        end
-        if overwrite
-            SessionParams = tmpparam; % But only store for this specific session - otherwise confusion!
-            SessionParams.KSDir = KiloSortPaths(subsesid);
-            SessionParams.RawDataPaths = RawDataPaths(subsesid);
-            save(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'),'SessionParams', '-append')
-            if ~ExtractChannelMapThenContinue
-                continue
             end
         end
     end
@@ -239,7 +200,7 @@ for subsesid = 1:length(KiloSortPaths)
     end
 
     %% Is it correct channelpos though...? Check using raw data. While reading this information, also extract recording duration and Serial number of probe
-    if ~isempty(rawD) & ~contains(rawD(1).name,'.dat')
+    if ~isempty(rawD) && ~any(contains(rawDcell,'.dat'))
         [channelpostmpconv, probeSN, recordingduration] = ChannelIMROConversion(rawD(1).folder, 0); % For conversion when not automatically done
         if recordingduration<Params.MinRecordingDuration
             disp([KiloSortPaths{subsesid} ' recording too short, skip...'])
@@ -254,33 +215,11 @@ for subsesid = 1:length(KiloSortPaths)
         AllProbeSN{subsesid} = probeSN;
     end
 
-    % JF overwrite for now. 
-    % if size(channelpostmp,1) ~= size(channelpostmpconv,1)
-    %     warning('Different number of channels in kilosort and metafile''s IMRO. Using metaFile''s version')
-    %     channelpostmp = channelpostmpconv;
-    % end
-    if size(channelpostmp,1) == size(channelpostmpconv,1) && any(channelpostmpconv(:)~=channelpostmp(:))
-        % Spacing:
-        SpacingsKS = max(unique(diff(channelpostmp(:,1))));
-        SpacingsReal = max(unique(diff(channelpostmpconv(:,1))));
-        if ismember((SpacingsReal - SpacingsKS),[0,50,100,150])
-            disp('Kilosort used different shank spacing for IMRO table. Not a big problem')
-        else
-
-            figure;
-            hold on; scatter(channelpostmpconv(:,1),channelpostmpconv(:,2))
-            scatter(channelpostmp(:,1),channelpostmp(:,2))
-            title('Blue = correct map, red = used by KS')
-            warning('Kilosort probably used wrong IMRO table. Consider reanalyzing')
-        end
-    end
-
     if ExtractChannelMapThenContinue % Version compatibility
         countid = countid + 1;
         ExtractChannelMapThenContinue = 0;
         continue
     end
-  
     
     %% Load histology if available
     tmphisto = dir(fullfile(KiloSortPaths{subsesid}, 'HistoEphysAlignment.mat'));
@@ -291,7 +230,7 @@ for subsesid = 1:length(KiloSortPaths)
     end
 
     %% Load Spike Data
-    sp = loadKSdir(KiloSortPaths{subsesid}, Params); % Load Spikes with PCs
+    sp = loadKSdir(fullfile(KiloSortPaths{subsesid}), Params); % Load Spikes with PCs
     [sp.spikeAmps, sp.spikeDepths, sp.templateDepths, sp.templateXpos, sp.tempAmps, sp.tempsUnW, sp.templateDuration, sp.waveforms] = ...
         templatePositionsAmplitudes(sp.temps, sp.winv, sp.ycoords, sp.xcoords, sp.spikeTemplates, sp.tempScalingAmps); %from the spikes toolbox
     templateWaveforms = sp.temps;
@@ -308,8 +247,6 @@ for subsesid = 1:length(KiloSortPaths)
     % clear paramBC
     if Params.RunQualityMetrics
         paramBC = bc_qualityParamValuesForUnitMatch(dir(strrep(fullfile(rawD(1).folder, rawD(1).name), 'cbin', 'meta')), fullfile(Params.tmpdatafolder, strrep(rawD(1).name, 'cbin', 'bin')));
-    else
-        paramBC.minNumSpikes = 300;
     end
     %% Load Cluster Info
     myClusFile = dir(fullfile(KiloSortPaths{subsesid}, 'cluster_info.tsv')); % If you did phy (manual curation) we will find this one... We can trust you, right?
@@ -368,7 +305,8 @@ for subsesid = 1:length(KiloSortPaths)
         clusinfo = tdfread(fullfile(myClusFile(1).folder, myClusFile(1).name));
         % Convert sp data to correct cluster according to phy (clu and
         % template are not necessarily the same after  splitting/merging)
-        [clusinfo, sp, emptyclus] = RemovingEmptyClusters(clusinfo, sp);
+        %[clusinfo, sp, emptyclus] = RemovingEmptyClusters(clusinfo, sp);
+        emptyclus = [];
 
         if ~any(~isnan(clusinfo.group))
             disp('clusinfo.group is empty, taking KS labels')
@@ -442,7 +380,6 @@ for subsesid = 1:length(KiloSortPaths)
     %     drawnow
 
     if Params.RunQualityMetrics
-        Donotinclude = 0;
         theseuniqueTemplates = [];
         unitTypeAcrossRec = [];
 
@@ -454,30 +391,21 @@ for subsesid = 1:length(KiloSortPaths)
 
             if length(rawD) > 1 % DO NOT DELETE!
                 savePath = fullfile(myClusFile(1).folder, num2str(id));
-                kilosortPath = myClusFile(1).folder;
                 idx = sp.SessionID == id;
             else
                 savePath = fullfile(KiloSortPaths{subsesid});
-                kilosortPath = savePath;
                 idx = sp.SessionID == 1;
             end
 
             qMetricsExist = ~isempty(dir(fullfile(savePath, '**', 'templates._bc_qMetrics.parquet'))); % ~isempty(dir(fullfile(savePath, 'qMetric*.mat'))) not used anymore?
 
-            if ~qMetricsExist & ~Params.ExtractNewDataNow 
-                disp('No new extractions now... continue')
-                Donotinclude = 1;
-                IncludeThese(subsesid) = false;
-
-                break
-            end
 
             InspectionFlag = 0;
             rerunEx = false;
             if isempty(dir(fullfile(savePath, '**', 'RawWaveforms'))) || rerunEx  % if raw waveforms have not been extract, decompress data for extraction
                 disp('Extracting sync file...')
                 % detect whether data is compressed, decompress locally if necessary
-                if ~exist(fullfile(Params.tmpdatafolder, strrep(rawD(id).name, 'cbin', 'bin')))
+                if ~exist(fullfile(Params.tmpdatafolder{1}, strrep(rawD(id).name, 'cbin', 'bin')))
                     disp('This is compressed data and we do not want to use Python integration... uncompress temporarily')
                     decompDataFile = bc_extractCbinData(fullfile(rawD(id).folder, rawD(id).name), ...
                         [], [], 0, fullfile(Params.tmpdatafolder, strrep(rawD(id).name, 'cbin', 'bin')));
@@ -537,10 +465,8 @@ for subsesid = 1:length(KiloSortPaths)
                 unitType = bc_getQualityUnitType(paramBC, qMetric);
                 %                 unitType(:) = 1; ???
 
-
-                % Commmented by CB for now    
-                spike_templates_0idx = readNPY([kilosortPath filesep 'spike_templates.npy']); % changed back 20230920 JF 
-
+                % Commmented by CB for now
+                spike_templates_0idx = readNPY([myClusFile(1).folder filesep 'spike_templates.npy']); % changed back 20230920 JF
                 spikeTemplates = spike_templates_0idx + 1;
                 uniqueTemplates = unique(spikeTemplates);
                 % need to load forGUI.tempWv??
@@ -597,9 +523,6 @@ for subsesid = 1:length(KiloSortPaths)
 
         end
 
-        if Donotinclude
-            continue
-        end
         AllUniqueTemplates = cat(1, AllUniqueTemplates(:), cat(1, theseuniqueTemplates{:}));
 
     else
@@ -632,9 +555,9 @@ for subsesid = 1:length(KiloSortPaths)
     clusinfo.ProbeID = ProbeAll;
     clusinfo.ShankID = ShankID;
     clusinfo.RecSesID = recsesAll;
-    clusinfo.ch = channel;
-    clusinfo.depth = depth;
-    clusinfo.cluster_id = AllUniqueTemplates;
+    %clusinfo.ch = channel;
+    %clusinfo.depth = depth;
+    %clusinfo.cluster_id = AllUniqueTemplates;
     clusinfo.group = Label;
     if length(Good_ID) > length(recsesAll)
         NonEmptyIdx = true(1, length(Good_ID));
@@ -667,13 +590,10 @@ for subsesid = 1:length(KiloSortPaths)
     sp = rmfield(sp, 'tempsUnW');
     sp = rmfield(sp, 'templateDuration');
     sp = rmfield(sp, 'waveforms');
-
-    SessionParams = Params; % But only store for this specific session - otherwise confusion!
-    SessionParams.KSDir = KiloSortPaths(subsesid);
-    SessionParams.RawDataPaths = RawDataPaths(subsesid);
-    SessionParams.AllChannelPos = {channelpostmpconv};
-    SessionParams.AllProbeSN = {probeSN};
-    save(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'), 'clusinfo', 'SessionParams', '-v7.3')
+    if exist('recordingduration', 'var')
+      Params.RecordingDuration = recordingduration;
+    end
+    save(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'), 'clusinfo', 'Params', '-v7.3')
     if Params.saveSp %QQ not using savePaths
         try
             save(fullfile(KiloSortPaths{subsesid}, 'PreparedData.mat'), 'sp', '-append')
@@ -685,10 +605,9 @@ for subsesid = 1:length(KiloSortPaths)
     countid = countid + 1;
 end
 
-Params.KSDir = KiloSortPaths(IncludeThese);
-Params.AllChannelPos = AllChannelPos(IncludeThese);
-Params.AllProbeSN = AllProbeSN(IncludeThese);
-Params.RawDataPaths = RawDataPaths(IncludeThese);
+Params.AllChannelPos = AllChannelPos;
+Params.AllProbeSN = AllProbeSN;
+Params.RawDataPaths = RawDataPaths;
 
 %% Remove temporary files
 if isstruct(RawDataPaths)

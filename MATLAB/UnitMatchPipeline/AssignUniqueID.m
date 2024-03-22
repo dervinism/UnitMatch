@@ -1,5 +1,4 @@
 function [UniqueIDConversion, MatchTable] = AssignUniqueID(SaveDir)
-disp('Loading match table to assign Unique IDs...')
 tmpfile = dir(fullfile(SaveDir,'UnitMatch.mat'));
 load(fullfile(tmpfile.folder,tmpfile.name))
 if exist('TmpFile', 'var')

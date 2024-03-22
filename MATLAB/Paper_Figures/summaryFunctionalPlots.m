@@ -1,4 +1,4 @@
-function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLabels, pltDayPairFig)
+function [FPSum, days, deltaDays, numMatchedUnits, maxAvailableUnits] = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLabels)
     %% Will plot summary plots: distribution, ROC and AUC. 
     % UMFiles: list cells contains path to UnitMatch.m files
     % whichMetric: will compute distributions/ROC/AUC on either 'Corr', 'Rank', or 'Sig'. 
@@ -13,39 +13,35 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
         whichMetric = 'Rank';
     end
 
-    if ~exist('groupVector','var') || isempty(groupVector)
+    if ~exist('groupVector','var')
         groupVector = 1:length(UMFiles);
     end
     groups = unique(groupVector);
     groupColor = gray(length(groups)+1);
 
-    if ~exist('UseKSLabels','var') || isempty(UseKSLabels)
+    if ~exist('UseKSLabels','var')
         UseKSLabels = 0;
-    end
-
-    if ~exist('pltDayPairFig','var') || isempty(pltDayPairFig)
-        pltDayPairFig = 0;
     end
 
     switch whichMetric
         case 'Corr'
             fprintf("Taking the correlation values!\n")
-            FPNames = {'FRDiff','ISICorr','natImRespCorr','refPopCorr'};
-            stepsz = [0.05 0.05 0.05 0.05];
+            FPNames = {'FRDiff','ACGCorr','natImRespCorr','refPopCorr'};
+            stepsz = [0.1 0.1 0.1 0.1];
             minVal = [0 -1 -1 -1];
             maxVal = [15 1 1 1];
             flipROC = [0 1 1 1];
         case 'Rank'
             fprintf("Taking the rank!\n")
-            FPNames = {'FRRank','ISIRank','natImRespRank','refPopRank'};
+            FPNames = {'FRRank','ACGRank','natImRespRank','refPopRank'};
             stepsz = [1 1 1 1];
             minVal = [0.5 0.5 0.5 0.5];
             maxVal = [20.5 20.5 20.5 20.5];
             flipROC = [0 0 0 0];
         case 'Sig'
             fprintf("Taking the sig!\n")
-            FPNames = {'FRSig','ISISig','natImRespSig','refPopSig'};
-            stepsz = [0.01 0.01 0.01 0.01];
+            FPNames = {'FRSig','ACGSig','natImRespSig','refPopSig'};
+            stepsz = [0.1 0.1 0.1 0.1];
             minVal = [0 0 0 0];
             maxVal = [1 1 1 1];
             flipROC = [0 0 0 0];
@@ -85,7 +81,7 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
     
         fprintf('Loading the data...\n')
         tic
-        load(fullfile(tmpfile.folder, tmpfile.name), 'MatchTable', 'UMparam', 'UniqueIDConversion');
+        load(fullfile(tmpfile.folder, tmpfile.name), 'MatchTable', 'UMparam');
         toc
     
         sessIDs = unique(MatchTable.RecSes1);
@@ -136,47 +132,19 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
                 if ~UseKSLabels
                     %%% CHECK THAT THIS MAKES SENSE
                     %%% CHOOSE BASED ON UID
-%                     matchedUnitsIdx = (MatchTable_2sess.UID1 == MatchTable_2sess.UID2) & (MatchTable_2sess.RecSes1 ~= MatchTable_2sess.RecSes2); % using Unique ID
-                    %%% OR RECOMPUTE
-                    idx = ismember(UniqueIDConversion.recsesAll, [sess1, sess2]) & UniqueIDConversion.GoodID' == 1;
-                    fnames = fieldnames(UniqueIDConversion);
-                    UniqueIDConversion_2sess.OriginalClusID = UniqueIDConversion.OriginalClusID(idx);
-                    UniqueIDConversion_2sess.recsesAll = UniqueIDConversion.recsesAll(idx);
-                    UniqueIDConversion_2sess.GoodID = UniqueIDConversion.GoodID(idx);
-                    UMparam.UseDatadrivenProbThrs = 0;
-                    
-                    [MatchTable_2sess, UniqueIDConversion_2sess] = AssignUniqueIDAlgorithm(MatchTable_2sess, UniqueIDConversion_2sess, UMparam);
-
-                    % Find matched units
-                    % % Should take liberal ones because only two days and easier to remove splits
                     matchedUnitsIdx = (MatchTable_2sess.UID1 == MatchTable_2sess.UID2) & (MatchTable_2sess.RecSes1 ~= MatchTable_2sess.RecSes2); % using Unique ID
-                    % Remove splits for now
-                    splitUnitsUIDs = unique(MatchTable_2sess((MatchTable_2sess.UID1 == MatchTable_2sess.UID2) ...
-                        & (MatchTable_2sess.ID1 ~= MatchTable_2sess.ID2) ...
-                        & (MatchTable_2sess.RecSes1 == MatchTable_2sess.RecSes2),:).UID1);
-                    splitUnitsIdx = ismember(MatchTable_2sess.UID1,splitUnitsUIDs);
-                    matchedUnitsIdx = matchedUnitsIdx & ~splitUnitsIdx;
-
-                    % matchedUnitsIdx = (MatchTable_2sess.UID1Conservative == MatchTable_2sess.UID2Conservative) & (MatchTable_2sess.RecSes1 ~= MatchTable_2sess.RecSes2); % using Unique ID
-                    % splitUnitsIdx = zeros(size(MatchTable_2sess,1),1);
-
+                    %%% OR RECOMPUTE
 %                     [~,~,idx,~] = getPairsAcross2Sess(MatchTable_2sess, UMparam.ProbabilityThreshold);
 %                     matchedUnitsIdx = zeros(size(MatchTable_2sess,1),1);
 %                     matchedUnitsIdx(idx) = 1;
                 else
                     matchedUnitsIdx = (MatchTable_2sess.ID1 == MatchTable_2sess.ID2) & (MatchTable_2sess.RecSes1 ~= MatchTable_2sess.RecSes2);
-                    splitUnitsIdx = zeros(size(MatchTable_2sess,1),1);
                 end
                 numMatchedUnits{midx}(sess1Idx,sess2Idx) = sum(matchedUnitsIdx)/2; % Divided by two because looking both ways -- can be non-integer
                 
                 maxAvailableUnits{midx}(sess1Idx,sess2Idx) = min([length(unique(MatchTable_2sess.ID1(MatchTable_2sess.RecSes1 == sess1))) length(unique(MatchTable_2sess.ID1(MatchTable_2sess.RecSes1 == sess2)))]);%
 
                 %% Looping through fingerprints
-                
-                if pltDayPairFig
-                    figure('Name',sprintf('Sessions %d & %d', sess1, sess2));
-                end
-
                 for fpIdx = 1:numel(FPNames)
                     FPNameCurr = FPNames{fpIdx};
     
@@ -195,9 +163,9 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
                         uUnit1ID = unique(Unit1ID); % list of units
                         reliability = MatchTable_2sess((MatchTable_2sess.ID1 == MatchTable_2sess.ID2) & (MatchTable_2sess.RecSes1 == MatchTable_2sess.RecSes2),:).NatImCorr; % test-retest reliability of each unit
     
-                        validPairs = ismember(Unit1ID, uUnit1ID(reliability > 0.2)) & ~splitUnitsIdx;
+                        validPairs = ismember(Unit1ID, uUnit1ID(reliability > 0.2));
                     else
-                        validPairs = ones(size(MatchTable_2sess,1),1) & ~splitUnitsIdx;
+                        validPairs = ones(size(MatchTable_2sess,1),1);
                     end
     
                     % Extract groups: "within", "match", "non-match"
@@ -244,14 +212,6 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
                         % Save
                         FPSum.(FPNameCurr).ROC{midx}(:,:,sess1Idx,sess2Idx) = [ROC1,ROC2];
                         FPSum.(FPNameCurr).AUC{midx}(:,sess1Idx,sess2Idx) = [AUC1, AUC2];
-
-                        if pltDayPairFig
-                            subplot(1,numel(FPNames),fpIdx); hold all
-                            title(FPNameCurr)
-                            scatter(MatchTable_2sess.MatchProb(acrossNonMatchIdx), MatchTable_2sess.(FPNameCurr)(acrossNonMatchIdx),10,'b')
-                            scatter(MatchTable_2sess.MatchProb(withinMatchIdx), MatchTable_2sess.(FPNameCurr)(withinMatchIdx),10,'g')
-                            scatter(MatchTable_2sess.MatchProb(acrossMatchIdx), MatchTable_2sess.(FPNameCurr)(acrossMatchIdx),10,'r')
-                        end
                     end
                 end
             end
@@ -263,7 +223,7 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
 
     % Number of matched units (matrix)
     for midx = 1:numel(UMFiles)
-        figure('Position', [80 700 1500 150],'Name', fileparts(fileparts(UMFiles{midx})));
+        figure('Position', [80 700 1700 170],'Name', fileparts(fileparts(UMFiles{midx})));
         s = subplot(1,numel(FPNames)+2,1);
         imagesc(numMatchedUnits{midx})
         xticks(1:size(deltaDays{midx},2))
@@ -282,10 +242,7 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
         for fpIdx = 1:numel(FPNames)
             FPNameCurr = FPNames{fpIdx};
             s = subplot(1,numel(FPNames)+2,fpIdx+2);
-            c = squeeze(FPSum.(FPNameCurr).AUC{midx}(1,:,:));
-            h = imagesc(c);
-            set(gca, 'Color', [0.5, 0.5, 0.5])
-            set(h, 'AlphaData', ~isnan(c))
+            imagesc(squeeze(FPSum.(FPNameCurr).AUC{midx}(1,:,:)))
             xticks(1:size(deltaDays{midx},2))
             xticklabels(days{midx})
             yticks(1:size(deltaDays{midx},1))
@@ -513,12 +470,4 @@ function res = summaryFunctionalPlots(UMFiles, whichMetric, groupVector, UseKSLa
             hline(0.5)
         end
     end
-
-    %% Save results in structure
-
-    res.FPSum = FPSum;
-    res.days = days;
-    res.deltaDays = deltaDays;
-    res.numMatchedUnits = numMatchedUnits;
-    res.maxAvailableUnits = maxAvailableUnits;
 end
