@@ -65,6 +65,7 @@ for session = 1:numel(UMparam.KSDir)
   UMparam.AllChannelPos{session} = [probeConf.xcoords(channelOrder{1}(session+nMissingSessions,:))' ...
     probeConf.ycoords(channelOrder{1}(session+nMissingSessions,:))'];
 end
+UMparam.separateIMRO = 1; % Run for every IMRO separately (for memory reasons or when having multiple probes this might be a good idea)
 spikesRepoPath = 'C:\Users\Martynas\Matlab_libraries\EnnyvanBeest_spikes';
 loadKSdirPath = 'C:\Users\Martynas\Matlab_libraries\UnitMatch\MATLAB\DataPreparation';
 % clusinfo = struct; % Note, this can be kilosort input, 
