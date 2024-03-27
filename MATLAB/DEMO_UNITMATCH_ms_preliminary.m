@@ -32,6 +32,7 @@ UMparam.KSDir = {'Z:\SUN-IN-Petersen-lab\EphysData\MartynasDervinis\ms-prelimina
                  'Z:\SUN-IN-Petersen-lab\EphysData\MartynasDervinis\ms-preliminary\03_data\PP01\PP01_2020-07-23_16-22-54'};  % This is a cell array with a path, in the path there should be a subfolder called 'RawWaveforms'. 
 % N.B. if you want to use the functional score evaluation of UnitMatch, 'KSDir' should also contain typical 'Kilosort output', (e.g. spike times etc.)
 
+
 %% N.B. the following user input can also be automatically extracted and prepared/cleaned up using UMparam = ExtractKilosortData(KiloSortPaths, UMparam) for Kilosorted data of SpikeGLX recorded data (see next section);
 UMparam.RawDataPaths = {'Z:\SUN-IN-Petersen-lab\EphysData\MartynasDervinis\ms-preliminary\03_data\PP01\PP01_2020-06-25_15-54-22\PP01_2020-06-25_15-54-22.dat', ...
                         'Z:\SUN-IN-Petersen-lab\EphysData\MartynasDervinis\ms-preliminary\03_data\PP01\PP01_2020-06-29_13-15-57\PP01_2020-06-29_13-15-57.dat', ...
@@ -94,41 +95,54 @@ addpath(genpath(spikesRepoPath));
 addpath(loadKSdirPath);
 
 
-%% Reorder channels (optional)
+%% Reorder channel info in UnitMatch PreparedData files
 % for session = 1:numel(UMparam.KSDir)
-%   if channelOrder{1}(session+nMissingSessions,1) ~= 1
-%     disp(['Reordering channels in ' UMparam.KSDir{session}]);
-%     reorderUnitMatchOutput(UMparam.KSDir{session}, ...
-%       channelOrder{1}(session+nMissingSessions,:), ...
-%       channelOrder{1}(1+nMissingSessions:end,:))
-%   end
+%   reorderUnitMatchOutput(UMparam.KSDir{session}, ...
+%     channelOrder{1}(session+nMissingSessions,:), ...
+%     channelOrder{1}(1+nMissingSessions:end,:), verbose=true);
 % end
 
+
 %% Optional (for Kilosort + SpikeGLX users) --- see ExampleAnalysisPipelines for more detail!!
+UMparam.nSavedChans = 384;
+UMparam.nSyncChans = 0;
+UMparam.nChannels = 384;
 UMparam = ExtractKilosortData(UMparam.KSDir, UMparam); % Extract KS data and do some noise removal, optionally decompresses cbin to bin data and uses BOMBCELL quality metric to define good single units
+% UMparam.nSavedChans = 384;
+% UMparam.nSyncChans = 0;
+% UMparam.nChannels = 384;
+% UMparam.loadPCs = 0;
+% UMparam.RunPyKSChronicStitched = 0;
+% UMparam.DecompressionFlag = 0;
+% UMparam.CleanUpTemporary = 0;
+% UMparam.tmpdatafolder = UMparam.KSDir(1);
+% UMparam.saveSp = 1;
+% UMparam.ReLoadAlways = 0;
+% UMparam.deNoise = 1;
+% UMparam.MinRecordingDuration = 10;
+% UMparam.RedoQM = 0;
+% UMparam.InspectQualityMetrics = 0;
+% UMparam.extractSync = 0;
+% UMparam.MakePlotsOfPairs = 0;
+% UMparam.GUI = 0;
+% UMparam.ACGbinSize = 0.001;
+% UMparam.ACGduration = 1;
+% UMparam.binsize = 0.01;
+% UMparam.AllProbeSN = {};
+% for session = 1:numel(UMparam.KSDir)
+%   UMparam.AllProbeSN{session} = [];
+% end
+for session = 1:numel(UMparam.KSDir)
+  UMparam.AllChannelPos{session} = [probeConf.xcoords(channelOrder{1}(session+nMissingSessions,:))' ...
+    probeConf.ycoords(channelOrder{1}(session+nMissingSessions,:))'];
+end
+
 clusinfo = getClusinfo(UMparam.KSDir); % prepare clusinfo struct
+
 
 %% Load default parameters
 UMparam = DefaultParametersUnitMatch(UMparam);
 
-%% Modify default parameters and reorder channel positions
-UMparam.nSavedChans = 384;
-UMparam.nSyncChans = 0;
-UMparam.nChannels = 384;
-
-%% Reorder channels
-% for u = 1:numel(clusinfo.ch)
-%   clusinfo.depth(u) = UMparam.AllChannelPos{clusinfo.RecSesID(u)}(clusinfo.ch(u)+1,2);
-%   session = clusinfo.RecSesID(u) + nMissingSessions;
-%   chOrder = channelOrder{1}(session,:);
-%   clusinfo.ch(u) = chOrder(clusinfo.ch(u)+1)-1;
-% end
-% chanMap = Neuropixels1_checkerboard_probeMap;
-% [~, ~, probeConf] = chanMap.get_native_map;
-% for session = 1:numel(UMparam.AllChannelPos)
-%   UMparam.AllChannelPos{session} = [probeConf.xcoords(channelOrder{1}(session,:))' ...
-%     probeConf.ycoords(channelOrder{1}(session,:))'];
-% end
 
 %% UnitMatch algorithm:
 [UniqueIDConversion, MatchTable, WaveformInfo, UMparam] = UnitMatch(clusinfo, UMparam);
@@ -138,10 +152,13 @@ end
 
 %%% N.B. From here it is all evaluation, you don't need this to use UnitMatch
 %%% results in your further analysis
+
+
 %% Automatic evaluation:
 EvaluatingUnitMatch(UMparam.SaveDir); % Within session cross-validation
 %QualityMetricsROCs(UMparam.SaveDir); % Only works in combination with BOMBCELL
 ComputeFunctionalScores(UMparam.SaveDir) % Only works when having access to Kilosort output (e.g. spike times etc.) 
+
 
 %% Curation:
 if UMparam.MakePlotsOfPairs
